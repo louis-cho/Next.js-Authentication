@@ -1,9 +1,7 @@
-// 세션 쿠키만 복호화하여 빠르게 redirect 처리 (DB 조회 X)
-
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { cookies } from 'next/headers'
 import { jwtVerify } from 'jose'
+import { AccessControl } from './lib/auth/access-control'  // 경로 맞게 수정
 
 const strategy = process.env.SESSION_STRATEGY || 'db'
 const sessionSecret = new TextEncoder().encode(process.env.SESSION_SECRET!)
@@ -11,9 +9,6 @@ const jwtSecret = new TextEncoder().encode(process.env.JWT_SECRET!)
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
-
-  const protectedRoutes = ['/dashboard', '/admin']
-  const publicRoutes = ['/login', '/signup', '/']
 
   const cookie = req.cookies.get('session')?.value
   let session = null
@@ -27,26 +22,31 @@ export async function middleware(req: NextRequest) {
         const { payload } = await jwtVerify(cookie, sessionSecret)
         session = payload
       } else {
-        session = { sessionId: cookie }  // 단순 db 세션
+        session = { sessionId: cookie }
       }
     } catch {
       session = null
     }
   }
 
-  // 보호된 페이지 → 로그인 안되어 있으면 redirect
-  if (protectedRoutes.includes(pathname) && !session) {
-    return NextResponse.redirect(new URL('/login', req.url))
+  // ✅ Public 페이지 접근 시
+  if (AccessControl.publicPages.includes(pathname)) {
+    if (session) {
+      // 로그인 되어있으면 → 그냥 user dashboard로 (admin인지 여부는 SSR에서)
+      return NextResponse.redirect(new URL('/user/dashboard', req.url))
+    }
+    return NextResponse.next()
   }
 
-  // 로그인, 회원가입 페이지 접근 시 이미 로그인한 경우 redirect
-  if (publicRoutes.includes(pathname) && session) {
-    return NextResponse.redirect(new URL('/dashboard', req.url))
+  // ✅ 보호된 페이지인데 로그인 안되어있으면 → 로그인 페이지로
+  if (
+    AccessControl.userPages.some(route => pathname.startsWith(route)) ||
+    AccessControl.adminPages.some(route => pathname.startsWith(route))
+  ) {
+    if (!session) {
+      return NextResponse.redirect(new URL('/login', req.url))
+    }
   }
 
   return NextResponse.next()
-}
-
-export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|.*\\.png$).*)'],
 }

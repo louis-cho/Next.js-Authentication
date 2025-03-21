@@ -6,7 +6,7 @@ export default function AdminPage() {
 }
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
-    const admin = await isAdmin()
+    const admin = await isAdmin(context.req.cookies)
 
     if (!admin) {
         return {

@@ -1,10 +1,11 @@
 // pages/api/admin/session-manage.ts
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { getCurrentUser, getUserSessions, deleteSessionById, deleteAllSessionsByUser } from '../../../lib/dal'
+import { getUserOrFail } from '@/lib/session-utils'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const admin = await getCurrentUser()
-  if (!admin || admin.role !== 'admin') return res.status(403).end()
+  const admin = await getUserOrFail(req.cookies, res)
+  if (!admin || admin.role !== 'admin') return;
 
   const { userId, sessionId } = req.query
 

@@ -1,5 +1,24 @@
 import { useState } from 'react'
 import { useRouter } from 'next/router'
+import { verifySession } from '@/lib/auth/session'
+import { GetServerSidePropsContext } from 'next'
+
+
+export async function getServerSideProps(context: GetServerSidePropsContext) {
+    const session = await verifySession(context.req.cookies)
+
+    if (session) {
+        // 이미 로그인된 경우 → 원하는 곳으로 리다이렉트
+        return {
+            redirect: {
+                destination: '/',
+                permanent: false
+            }
+        }
+    }
+
+    return { props: {} }
+}
 
 export default function Login() {
     const [form, setForm] = useState({ email: '', password: '' })
@@ -13,13 +32,19 @@ export default function Login() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(form),
+            credentials: 'include'
         })
 
         const data = await res.json();
         if (res.ok) {
             setErrors({})
             setMessage(data.message)
-            router.push('/dashboard') // 로그인 성공 후 이동할 페이지
+            // 🔥 Role에 따라 다른 곳으로 이동
+            if (data.role === 'admin') {
+                router.push('/admin/dashboard')
+            } else {
+                router.push('/user/dashboard')
+            }
         } else if (res.status === 400 && data.errors) {
             setErrors(data.errors)
             setMessage('')

@@ -5,7 +5,9 @@ export default function SessionManagePage() {
   const [sessions, setSessions] = useState([])
 
   const fetchSessions = async () => {
-    const res = await fetch(`/api/admin/session-manage?userId=${userId}`)
+    const res = await fetch(`/api/admin/session-manage?userId=${userId}`, {
+      credentials: 'include', // ✅ 추가
+    })
     if (res.ok) {
       const data = await res.json()
       setSessions(data.sessions)
@@ -15,6 +17,7 @@ export default function SessionManagePage() {
   const deleteSession = async (sessionId: number) => {
     await fetch(`/api/admin/session-manage?userId=${userId}&sessionId=${sessionId}`, {
       method: 'DELETE',
+      credentials: 'include'
     })
     fetchSessions() // refresh
   }
@@ -22,6 +25,7 @@ export default function SessionManagePage() {
   const deleteAllSessions = async () => {
     await fetch(`/api/admin/session-manage?userId=${userId}`, {
       method: 'DELETE',
+      credentials: 'include'
     })
     setSessions([])
   }

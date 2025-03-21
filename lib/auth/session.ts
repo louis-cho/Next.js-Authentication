@@ -1,6 +1,6 @@
-import { db } from './db'
-import { cookies } from 'next/headers'
+import { db } from '../db'
 import { SignJWT, jwtVerify } from 'jose'
+import { serialize } from 'cookie'
 
 const strategy = process.env.SESSION_STRATEGY || 'db'
 const sessionSecret = new TextEncoder().encode(process.env.SESSION_SECRET!)
@@ -19,7 +19,7 @@ export async function createSession(user: { id: number, role: string }) {
       .setExpirationTime('7d')
       .sign(sessionSecret)
   } else {
-    
+
     const result = await db.query(
       'INSERT INTO next_sessions (user_id, expires_at) VALUES ($1, $2) RETURNING id',
       [user.id, expiresAt]
@@ -37,18 +37,20 @@ export async function createSession(user: { id: number, role: string }) {
     }
   }
 
-  cookies().set('session', sessionToken, {
+  const cookie = serialize('session', sessionToken, {
     httpOnly: true,
-    secure: true,
+    secure: process.env.NODE_ENV === 'production',
     expires: expiresAt,
     sameSite: 'lax',
     path: '/',
   })
+
+  return cookie
 }
 
 // 세션 검증
-export async function verifySession() {
-  const sessionCookie = cookies().get('session')?.value
+export async function verifySession(rawCookies: { [key: string]: string | undefined }) {
+  const sessionCookie = rawCookies['session']
   if (!sessionCookie) return null
 
   if (strategy === 'jwt') {
@@ -84,13 +86,14 @@ export async function verifySession() {
 
 
 // 세션 삭제 (로그아웃)
-export async function deleteSession() {
-  const sessionCookie = cookies().get('session')?.value
-  if (!sessionCookie) return
+export async function deleteSession(rawCookies: { [key: string]: string | undefined }) {
+  const sessionCookie = rawCookies['session']
+  if (!sessionCookie) {
+    return serialize('session', '', { path: '/', expires: new Date(0) }) // 만료시킴
+  }
 
   if (strategy === 'jwt') {
-    cookies().delete('session')
-    return
+    return serialize('session', '', { path: '/', expires: new Date(0) })
   }
 
   let sessionId
@@ -99,13 +102,12 @@ export async function deleteSession() {
       const { payload } = await jwtVerify(sessionCookie, sessionSecret)
       sessionId = payload.sessionId
     } catch {
-      cookies().delete('session')
-      return
+      return serialize('session', '', { path: '/', expires: new Date(0) })
     }
   } else {
     sessionId = sessionCookie
   }
 
   await db.query('DELETE FROM next_sessions WHERE id = $1', [sessionId])
-  cookies().delete('session')
+  return serialize('session', '', { path: '/', expires: new Date(0) })
 }

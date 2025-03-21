@@ -1,9 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { LoginFormSchema, LoginFormState } from '@/lib/validations'
+import { LoginFormSchema, LoginFormState } from '@/lib/util/validations'
 import { db } from '@/lib/db'
-import { comparePassword, signToken } from '@/lib/auth'
-import cookie from 'cookie'
-import { createSession } from '@/lib/session'
+import { comparePassword } from '@/lib/auth'
+import { createSession } from '@/lib/auth/session'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse<LoginFormState>) {
     if (req.method !== 'POST') return res.status(405).end()
@@ -30,19 +29,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
         }
 
 
-        await createSession({ id: user.id, role: user.role })
+        const sessionCookie = await createSession({ id: user.id, role: user.role })
+        res.setHeader('Set-Cookie', sessionCookie);
 
-        // JWT 생성
-        const token = await signToken({ id: user.id, email: user.email })
 
-        // 쿠키로 전달
-        res.setHeader('Set-Cookie', cookie.serialize('session', token, {
-            httpOnly: true,
-            path: '/',
-            maxAge: 60 * 60 * 24 * 7, // 7일
-        }))
-
-        return res.status(200).json({ message: '로그인 성공!' })
+        return res.status(200).json({
+            message: '로그인 성공!'
+        })
     } catch (err) {
         return res.status(500).json({ message: '서버 오류: ' + err })
     }

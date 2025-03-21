@@ -1,24 +1,17 @@
 # Next.js-Authentication
 공식 문서를 보고 만드는 Next.js Authentication 예제
 
-/pages
-  /signup.tsx           → 회원가입 페이지
-  /login.tsx            → 로그인 페이지
-  /dashboard.tsx        → 일반 사용자 페이지
-  /admin.tsx            → 관리자 전용 보호 페이지
-  /unauthorized.tsx
-  /api
-    /auth
-      signup.ts         → 회원가입 API
-      login.ts          → 로그인 API
-      logout.ts         → 로그아웃 API
-/middleware.ts          → 세션/권한 확인
 /lib
-  session.ts     → 세션 관리 (이미 있음, 그대로 활용)
-  auth.ts               → 세션, JWT 처리 함수
-  db.ts                 → DB 연결
-  validations.ts        → 로그인용 Zod 스키마 추가
-  dal.ts         → 세션 검증 + user 데이터 fetch + role 확인
-  dto.ts         → DTO 패턴 적용
-
-/middleware.ts   → Optimistic Middleware
+ └── /auth
+      ├── access-control.ts       // public/user/admin 경로 변수 관리
+      ├── session.ts              // 세션 생성/검증 (지금 쓰시던 거)
+      ├── role-guards.ts          // SSR + API 공통 보호 wrapper
+      └── middleware-guard.ts     // Middleware 보호 빠른 처리
+/pages
+ ├── index.tsx                   // Public
+ ├── login.tsx                   // Public
+ ├── /dashboard.tsx              // User
+ ├── /admin/dashboard.tsx        // Admin
+ └── api
+      ├── /user/profile.ts       // User API
+      └── /admin/session-manage.ts // Admin API

@@ -1,10 +1,19 @@
 // 세션 확인 + DB 확인
-import { verifySession } from './session'
+import { verifySession } from './auth/session'
 import { db } from './db'
 
+
+export async function getUserById(userId: number) {
+    const result = await db.query(
+        'SELECT id, name, email, role FROM next_users WHERE id = $1',
+        [userId]
+    )
+    return result.rowCount ? result.rows[0] : null
+}
+
 // 유저 정보 가져오기
-export async function getCurrentUser() {
-    const session = await verifySession()
+export async function getCurrentUser(rawCookies: { [key: string]: string | undefined }) {
+    const session = await verifySession(rawCookies)
     if (!session) return null
 
     const result = await db.query(
@@ -25,14 +34,14 @@ export async function getUserSessions(userId: number) {
     return result.rows
 }
 
-export async function isAdmin() {
-    const user = await getCurrentUser()
+export async function isAdmin(rawCookies: { [key: string]: string | undefined }) {
+    const user = await getCurrentUser(rawCookies)
     if (!user) return false
     return user.role === 'admin'
 }
 
-export async function isUser() {
-    const user = await getCurrentUser()
+export async function isUser(rawCookies: { [key: string]: string | undefined }) {
+    const user = await getCurrentUser(rawCookies)
     if (!user) return false
     return user.role === 'user'
 }
