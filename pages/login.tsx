@@ -1,57 +1,72 @@
-import { useState } from 'react'
-import { useRouter } from 'next/router'
-import { verifySession } from '@/lib/auth/session'
-import { GetServerSidePropsContext } from 'next'
+import { ERROR_CODES } from '@/constants/errorCodes';
+import { verifySession } from '@/lib/auth/session';
+import { useRouter } from 'next/router';
+import { useState } from 'react';
+export async function getServerSideProps(context) {
+    console.log("[Login Page] cookies >>", context.req.cookies);
 
+    const sessionToken = context.req.cookies.session;
+    console.log("[Login Page] sessionToken >>", sessionToken);
 
-export async function getServerSideProps(context: GetServerSidePropsContext) {
-    const session = await verifySession(context.req.cookies)
+    const session = await verifySession(sessionToken); // 문자열 하나 넘김
+    console.log("[Login Page] 세션 >>", session);
 
     if (session) {
-        // 이미 로그인된 경우 → 원하는 곳으로 리다이렉트
         return {
             redirect: {
                 destination: '/',
                 permanent: false
             }
-        }
+        };
     }
 
-    return { props: {} }
+    return { props: {} };
 }
 
+
+
 export default function Login() {
-    const [form, setForm] = useState({ email: '', password: '' })
-    const [errors, setErrors] = useState<{ email?: string[], password?: string[] }>({})
-    const [message, setMessage] = useState('')
-    const router = useRouter()
+    const [form, setForm] = useState({ email: '', password: '' });
+    const [errors, setErrors] = useState<{ email?: string[], password?: string[] }>({});
+    const [message, setMessage] = useState('');
+    const router = useRouter();
 
     const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault()
+        e.preventDefault();
         const res = await fetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(form),
-            credentials: 'include'
-        })
+            credentials: 'include' // ✅ 쿠키 전달 필수
+        });
 
         const data = await res.json();
-        if (res.ok) {
-            setErrors({})
-            setMessage(data.message)
-            // 🔥 Role에 따라 다른 곳으로 이동
+        console.log("data >> " + JSON.stringify(data));
+
+        if (res.status === 200) {
+            setErrors({});
+            setMessage(data.message);
             if (data.role === 'admin') {
-                router.push('/admin/dashboard')
+                router.push('/admin/dashboard');
             } else {
-                router.push('/user/dashboard')
+                router.push('/user/dashboard');
             }
         } else if (res.status === 400 && data.errors) {
-            setErrors(data.errors)
-            setMessage('')
+            setErrors(data.errors);
+            setMessage('');
         } else {
-            setMessage(data.message || '에러 발생')
+            switch (data.code) {
+                case ERROR_CODES.LOGIN.INVALID_CREDENTIALS.code:
+                    setMessage('아이디 또는 비밀번호가 틀렸습니다');
+                    break;
+                case ERROR_CODES.LOGIN.USER_NOT_FOUND.code:
+                    setMessage('존재하지 않는 사용자입니다');
+                    break;
+                default:
+                    setMessage(data.message || '알 수 없는 에러 발생');
+            }
         }
-    }
+    };
 
     return (
         <form onSubmit={handleSubmit}>
@@ -74,5 +89,5 @@ export default function Login() {
             <button type="submit">Login</button>
             <p>{message}</p>
         </form>
-    )
+    );
 }

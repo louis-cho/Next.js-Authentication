@@ -1,42 +1,57 @@
-import type { NextApiRequest, NextApiResponse } from 'next'
-import { LoginFormSchema, LoginFormState } from '@/lib/util/validations'
-import { db } from '@/lib/db'
-import { comparePassword } from '@/lib/auth'
-import { createSession } from '@/lib/auth/session'
+import { createSessionCookie } from '@/lib/auth/cookie';
+import { handleError } from '@/lib/errors/handleError';
+import { LoginFormSchema, LoginFormState } from '@/lib/util/validations';
+import * as SessionService from '@/services/sessionService';
+import * as UserService from '@/services/userService';
+import type { NextApiRequest, NextApiResponse } from 'next';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse<LoginFormState>) {
-    if (req.method !== 'POST') return res.status(405).end()
+    if (req.method !== 'POST') return res.status(405).end();
 
     try {
-        const parsed = LoginFormSchema.safeParse(req.body)
+        const parsed = LoginFormSchema.safeParse(req.body);
         if (!parsed.success) {
-            const zodErrors = parsed.error.flatten().fieldErrors
-            return res.status(400).json({ errors: zodErrors })
+            const zodErrors = parsed.error.flatten().fieldErrors;
+            return res.status(400).json({ errors: zodErrors });
         }
 
-        const { email, password } = parsed.data
+        const { email, password } = parsed.data;
 
-        // DB에서 사용자 찾기
-        const result = await db.query('SELECT * FROM next_users WHERE email = $1', [email])
-        if (result.rowCount === 0) {
-            return res.status(401).json({ message: '존재하지 않는 사용자입니다.' })
+        // 사용자 인증
+        let user = null;
+        try {
+            user = await UserService.authenticateUser(email, password);
+            if (!user) {
+                return res.status(401).json({ message: '잘못된 이메일 또는 비밀번호입니다.' });
+            }
+        } catch (err) {
+            return handleError(res, err);
         }
 
-        const user = result.rows[0]
-        const valid = await comparePassword(password, user.password)
-        if (!valid) {
-            return res.status(401).json({ message: '비밀번호가 일치하지 않습니다.' })
+        console.log("user >> " + JSON.stringify(user));
+
+        // 세션 생성
+        const sessionResult = await SessionService.createSession(user);
+
+        // 쿠키 생성
+        let cookie: string;
+        if (process.env.SESSION_STRATEGY === 'db' && sessionResult?.sessionId && sessionResult.expiresAt) {
+            cookie = createSessionCookie(sessionResult.sessionId, sessionResult.expiresAt);
+        } else if ((process.env.SESSION_STRATEGY === 'db-jwt' || process.env.SESSION_STRATEGY === 'jwt') && sessionResult?.jwt && sessionResult.expiresAt) {
+            cookie = createSessionCookie(sessionResult.jwt, sessionResult.expiresAt);
+        } else {
+            return res.status(500).json({ message: '잘못된 SESSION_STRATEGY 설정입니다.' });
         }
 
-
-        const sessionCookie = await createSession({ id: user.id, role: user.role })
-        res.setHeader('Set-Cookie', sessionCookie);
-
+        console.log("cookie >> " + cookie);
+        res.setHeader('Set-Cookie', cookie);
 
         return res.status(200).json({
-            message: '로그인 성공!'
-        })
+            message: '로그인 성공!',
+            role: user.role,
+        });
     } catch (err) {
-        return res.status(500).json({ message: '서버 오류: ' + err })
+        console.error(err);
+        return res.status(500).json({ message: '서버 오류가 발생했습니다.' });
     }
 }

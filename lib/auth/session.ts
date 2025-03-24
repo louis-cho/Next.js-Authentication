@@ -1,113 +1,94 @@
-import { db } from '../db'
-import { SignJWT, jwtVerify } from 'jose'
-import { serialize } from 'cookie'
+import { clearSessionCookie, createSessionCookie } from '@/lib/auth/cookie';
+import { signToken, verifyToken } from '@/lib/auth/token';
+import { db } from '@/lib/db';
 
-const strategy = process.env.SESSION_STRATEGY || 'db'
-const sessionSecret = new TextEncoder().encode(process.env.SESSION_SECRET!)
-const jwtSecret = new TextEncoder().encode(process.env.JWT_SECRET!)
+const strategy = process.env.SESSION_STRATEGY || 'db';
 
-// 세션 생성
 export async function createSession(user: { id: number, role: string }) {
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-  let sessionToken: string
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7일
+  let sessionToken: string;
 
   if (strategy === 'jwt') {
-    // 세션 ID를 JWT로 암호화
-    sessionToken = await new SignJWT({ userId: user.id, role: user.role, expiresAt })
-      .setProtectedHeader({ alg: 'HS256' })
-      .setIssuedAt()
-      .setExpirationTime('7d')
-      .sign(sessionSecret)
+    sessionToken = await signToken(
+      { userId: user.id, role: user.role, expiresAt },
+      false // SECRET
+    );
   } else {
-
     const result = await db.query(
-      'INSERT INTO next_sessions (user_id, expires_at) VALUES ($1, $2) RETURNING id',
+      'INSERT INTO sessions (user_id, expires_at) VALUES ($1, $2) RETURNING id',
       [user.id, expiresAt]
-    )
-    const sessionId = result.rows[0].id
+    );
+    const sessionId = result.rows[0].id;
 
     if (strategy === 'db-jwt') {
-      sessionToken = await new SignJWT({ sessionId, expiresAt })
-        .setProtectedHeader({ alg: 'HS256' })
-        .setIssuedAt()
-        .setExpirationTime('7d')
-        .sign(sessionSecret)
+      sessionToken = await signToken(
+        { sessionId, expiresAt: expiresAt.toISOString() }, // ISO로 넣기
+        true // SECRET <<<< 핵심
+      );
     } else {
-      sessionToken = String(sessionId)
+      sessionToken = String(sessionId);
     }
   }
 
-  const cookie = serialize('session', sessionToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    expires: expiresAt,
-    sameSite: 'lax',
-    path: '/',
-  })
-
-  return cookie
+  return createSessionCookie(sessionToken, expiresAt);
 }
 
-// 세션 검증
-export async function verifySession(rawCookies: { [key: string]: string | undefined }) {
-  const sessionCookie = rawCookies['session']
-  if (!sessionCookie) return null
+export async function verifySession(sessionToken: string | undefined) {
+  console.log('[verifySession] sessionToken >>', sessionToken);
+  if (!sessionToken) return null;
 
-  if (strategy === 'jwt') {
-    try {
-      const { payload } = await jwtVerify(sessionCookie, jwtSecret)
-      return { userId: payload.userId, role: payload.role }
-    } catch {
-      return null
+  try {
+    if (strategy === 'jwt') {
+      const { payload } = await verifyToken(sessionToken, false); // SECRET
+      return { userId: payload.userId, role: payload.role };
     }
-  }
 
-  let sessionId
-  if (strategy === 'db-jwt') {
-    try {
-      const { payload } = await jwtVerify(sessionCookie, sessionSecret)
-      sessionId = payload.sessionId
-    } catch {
-      return null
+    if (strategy === 'db-jwt') {
+      const { payload } = await verifyToken(sessionToken, true); // SECRET
+      console.log('[verifySession] payload >>', payload);
+      const sessionId = payload.sessionId;
+
+      // DB에서 세션 가져오기 (role 포함)
+      const result = await db.query(
+        'SELECT sessions.user_id, users.role FROM sessions JOIN users ON sessions.user_id = users.id WHERE sessions.id = $1',
+        [sessionId]
+      );
+
+      if (result.rowCount === 0) return null;
+
+      return { userId: result.rows[0].user_id, role: result.rows[0].role };
     }
-  } else {
-    sessionId = sessionCookie
+
+    // db 전략 생략 가능
+  } catch (err) {
+    console.error('[verifySession] 세션 검증 실패 >>', err);
+    return null;
   }
-
-  // DB에서 세션 확인
-  const result = await db.query(
-    'SELECT * FROM next_sessions WHERE id = $1 AND expires_at > NOW()',
-    [sessionId]
-  )
-  if (result.rowCount === 0) return null
-
-  return { userId: result.rows[0].user_id }
 }
 
-
-// 세션 삭제 (로그아웃)
 export async function deleteSession(rawCookies: { [key: string]: string | undefined }) {
-  const sessionCookie = rawCookies['session']
+  const sessionCookie = rawCookies['session'];
   if (!sessionCookie) {
-    return serialize('session', '', { path: '/', expires: new Date(0) }) // 만료시킴
+    return clearSessionCookie();
   }
 
-  if (strategy === 'jwt') {
-    return serialize('session', '', { path: '/', expires: new Date(0) })
-  }
-
-  let sessionId
-  if (strategy === 'db-jwt') {
-    try {
-      const { payload } = await jwtVerify(sessionCookie, sessionSecret)
-      sessionId = payload.sessionId
-    } catch {
-      return serialize('session', '', { path: '/', expires: new Date(0) })
+  try {
+    if (strategy === 'jwt') {
+      return clearSessionCookie();
     }
-  } else {
-    sessionId = sessionCookie
+
+    let sessionId;
+    if (strategy === 'db-jwt') {
+      const { payload } = await verifyToken(sessionCookie, true); // SECRET
+      sessionId = payload.sessionId;
+    } else {
+      sessionId = sessionCookie;
+    }
+
+    await db.query('DELETE FROM sessions WHERE id = $1', [sessionId]);
+  } catch (err) {
+    console.error('[deleteSession] Error:', err);
   }
 
-  await db.query('DELETE FROM next_sessions WHERE id = $1', [sessionId])
-  return serialize('session', '', { path: '/', expires: new Date(0) })
+  return clearSessionCookie();
 }

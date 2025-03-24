@@ -1,11 +1,11 @@
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
-import { jwtVerify } from 'jose'
-import { AccessControl } from './lib/auth/access-control'  // 경로 맞게 수정
+import { jwtVerify } from 'jose';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
+import { AccessControl } from './lib/auth/access-control'; // 경로 맞게 수정
 
 const strategy = process.env.SESSION_STRATEGY || 'db'
-const sessionSecret = new TextEncoder().encode(process.env.SESSION_SECRET!)
-const jwtSecret = new TextEncoder().encode(process.env.JWT_SECRET!)
+const sessionSecret = new TextEncoder().encode(process.env.SECRET!)
+const jwtSecret = new TextEncoder().encode(process.env.SECRET!)
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl

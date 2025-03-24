@@ -1,7 +1,7 @@
 // lib/session-utils.ts
 
-import { verifySession } from './auth/session'
-import { db } from './db'
+import { verifySession } from './session'
+import { db } from '../db'
 import { serialize } from 'cookie'
 import { GetServerSidePropsContext, NextApiResponse } from 'next'
 
@@ -29,7 +29,7 @@ export async function getUserOrRedirect(
   }
 
   const result = await db.query(
-    'SELECT id, name, email, role FROM next_users WHERE id = $1',
+    'SELECT id, name, email, role FROM users WHERE id = $1',
     [session.userId]
   )
 
@@ -69,7 +69,7 @@ export async function getUserOrFail(
   }
 
   const result = await db.query(
-    'SELECT id, name, email, role FROM next_users WHERE id = $1',
+    'SELECT id, name, email, role FROM users WHERE id = $1',
     [session.userId]
   )
 

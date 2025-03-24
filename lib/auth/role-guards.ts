@@ -23,7 +23,7 @@ export function withAdminPage(handler) {
       context.res.setHeader('Set-Cookie', serialize('session', '', { path: '/', expires: new Date(0) }))
       return { redirect: { destination: '/login', permanent: false } }
     }
-    const result = await db.query('SELECT role FROM next_users WHERE id = $1', [session.userId])
+    const result = await db.query('SELECT role FROM users WHERE id = $1', [session.userId])
     if (result.rowCount === 0 || result.rows[0].role !== 'admin') {
       return { redirect: { destination: '/unauthorized', permanent: false } }
     }
@@ -45,7 +45,7 @@ export function withAdminApi(handler) {
   return async (req, res: NextApiResponse) => {
     const session = await verifySession(req.cookies)
     if (!session) return res.status(401).json({ message: 'Unauthorized' })
-    const result = await db.query('SELECT role FROM next_users WHERE id = $1', [session.userId])
+    const result = await db.query('SELECT role FROM users WHERE id = $1', [session.userId])
     if (result.rowCount === 0 || result.rows[0].role !== 'admin') {
       return res.status(403).json({ message: 'Forbidden' })
     }

@@ -39,6 +39,7 @@ export type LoginFormState = {
     errors?: {
         email?: string[]
         password?: string[]
-    }
+    },
+    role?: string,
     message?: string
 }
