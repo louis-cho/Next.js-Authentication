@@ -1,7 +1,7 @@
-import { GetServerSidePropsContext, NextApiResponse } from 'next'
-import { verifySession } from './session'
-import { db } from '../db'
+import { verifySession } from '@/lib/auth/session'
+import { db } from '@/lib/db'
 import { serialize } from 'cookie'
+import { GetServerSidePropsContext, NextApiResponse } from 'next'
 
 // SSR: User 보호
 export function withUserPage(handler) {
@@ -19,14 +19,22 @@ export function withUserPage(handler) {
 export function withAdminPage(handler) {
   return async (context: GetServerSidePropsContext) => {
     const session = await verifySession(context.req.cookies)
+    console.log("[withAdminPage] session >>", session);
+
     if (!session) {
-      context.res.setHeader('Set-Cookie', serialize('session', '', { path: '/', expires: new Date(0) }))
+      console.log("[withAdminPage] 세션 없음 - 로그인 페이지로 이동");
+      context.res.setHeader('Set-Cookie', serialize('session', '', { path: '/', expires: new Date(0) }));
       return { redirect: { destination: '/login', permanent: false } }
     }
-    const result = await db.query('SELECT role FROM users WHERE id = $1', [session.userId])
+
+    const result = await db.query('SELECT role FROM users WHERE id = $1', [session.userId]);
+    console.log("[withAdminPage] DB role 결과 >>", result.rows);
+
     if (result.rowCount === 0 || result.rows[0].role !== 'admin') {
+      console.log("[withAdminPage] 권한 부족 - unauthorized 페이지로 이동");
       return { redirect: { destination: '/unauthorized', permanent: false } }
     }
+
     return handler(context, session)
   }
 }

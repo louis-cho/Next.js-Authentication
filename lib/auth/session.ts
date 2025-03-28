@@ -1,4 +1,5 @@
-import { clearSessionCookie, createSessionCookie } from '@/lib/auth/cookie';
+import { ROLES } from '@/constants/role';
+import { createSessionCookie } from '@/lib/auth/cookie';
 import { signToken, verifyToken } from '@/lib/auth/token';
 import { db } from '@/lib/db';
 
@@ -33,18 +34,29 @@ export async function createSession(user: { id: number, role: string }) {
   return createSessionCookie(sessionToken, expiresAt);
 }
 
-export async function verifySession(sessionToken: string | undefined) {
-  console.log('[verifySession] sessionToken >>', sessionToken);
-  if (!sessionToken) return null;
+export async function verifySession(rawCookies: { [key: string]: string | undefined }) {
+  const sessionCookie = rawCookies['session'];
+  if (!sessionCookie) {
+    return null;
+  }
+
+  console.log('[verifySession] sessionToken >>', sessionCookie);
+  if (!sessionCookie) return null;
 
   try {
     if (strategy === 'jwt') {
-      const { payload } = await verifyToken(sessionToken, false); // SECRET
-      return { userId: payload.userId, role: payload.role };
+      const { payload } = await verifyToken(sessionCookie, false) // ← false: JWT_SECRET
+      console.log('[verifyToken] payload >>', payload)
+
+      return {
+        userId: payload.userId,
+        role: payload.role ?? ROLES.VIEWER,
+        expireAt: payload.exp ?? null,
+      }
     }
 
     if (strategy === 'db-jwt') {
-      const { payload } = await verifyToken(sessionToken, true); // SECRET
+      const { payload } = await verifyToken(sessionCookie, true); // SECRET
       console.log('[verifySession] payload >>', payload);
       const sessionId = payload.sessionId;
 
@@ -66,15 +78,69 @@ export async function verifySession(sessionToken: string | undefined) {
   }
 }
 
+export async function extendSession(rawCookies: { [key: string]: string | undefined }) {
+  const sessionCookie = rawCookies['session'];
+  if (!sessionCookie) return null;
+
+  const newExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7일 연장
+  let sessionToken: string;
+
+  try {
+    if (strategy === 'jwt') {
+      const { payload } = await verifyToken(sessionCookie, false);
+      sessionToken = await signToken(
+        {
+          userId: payload.userId,
+          role: payload.role,
+          expiresAt: newExpiresAt,
+        },
+        false
+      );
+      return createSessionCookie(sessionToken, newExpiresAt);
+    }
+
+    if (strategy === 'db-jwt') {
+      const { payload } = await verifyToken(sessionCookie, true);
+      const sessionId = payload.sessionId;
+
+      await db.query(
+        'UPDATE sessions SET expires_at = $1 WHERE id = $2',
+        [newExpiresAt, sessionId]
+      );
+
+      sessionToken = await signToken(
+        {
+          sessionId,
+          expiresAt: newExpiresAt.toISOString(),
+        },
+        true
+      );
+      return createSessionCookie(sessionToken, newExpiresAt);
+    }
+
+    // db 방식
+    const sessionId = sessionCookie;
+    await db.query(
+      'UPDATE sessions SET expires_at = $1 WHERE id = $2',
+      [newExpiresAt, sessionId]
+    );
+    return createSessionCookie(sessionId, newExpiresAt);
+  } catch (err) {
+    console.error('[extendSession] Error:', err);
+    return null;
+  }
+}
+
+
 export async function deleteSession(rawCookies: { [key: string]: string | undefined }) {
   const sessionCookie = rawCookies['session'];
   if (!sessionCookie) {
-    return clearSessionCookie();
+    return null;
   }
 
   try {
     if (strategy === 'jwt') {
-      return clearSessionCookie();
+      return null;
     }
 
     let sessionId;
@@ -90,5 +156,5 @@ export async function deleteSession(rawCookies: { [key: string]: string | undefi
     console.error('[deleteSession] Error:', err);
   }
 
-  return clearSessionCookie();
+  return null;
 }

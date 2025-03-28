@@ -43,7 +43,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
             return res.status(500).json({ message: '잘못된 SESSION_STRATEGY 설정입니다.' });
         }
 
-        console.log("cookie >> " + cookie);
+        console.log("cookie 32323 >> " + cookie);
         res.setHeader('Set-Cookie', cookie);
 
         return res.status(200).json({

@@ -1,9 +1,10 @@
 import { SignJWT, jwtVerify } from 'jose';
 
-const SECRET = new TextEncoder().encode(process.env.SECRET!);
+export const DB_SECRET = new TextEncoder().encode(process.env.DB_SECRET!);
+export const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET!);
 
 export async function signToken(payload: object, useSessionSecret = false) {
-    const secret = useSessionSecret ? SECRET : SECRET;
+    const secret = useSessionSecret ? DB_SECRET : JWT_SECRET;
     return new SignJWT(payload)
         .setProtectedHeader({ alg: 'HS256' })
         .setExpirationTime('7d')
@@ -11,7 +12,7 @@ export async function signToken(payload: object, useSessionSecret = false) {
 }
 
 export async function verifyToken(token: string, useSessionSecret = false) {
-    const secret = useSessionSecret ? SECRET : SECRET;
+    const secret = useSessionSecret ? DB_SECRET : JWT_SECRET;
     try {
         const result = await jwtVerify(token, secret);
         console.log('[verifyToken] payload >>', result.payload);
