@@ -59,7 +59,7 @@ export const AuthProvider = ({ children }) => {
             }
 
             const data = await res.json()
-            console.log('[AuthProvider] 세션 정보 받아옴 >>', data)
+            console.log('[AuthProvider] 세션 정보 받아옴 >>', JSON.stringify(data))
 
             setSession({
                 userId: data.userId,
@@ -81,15 +81,24 @@ export const AuthProvider = ({ children }) => {
         }
     }, [])
 
-    const logout = useCallback(async () => {
-        await fetch('/api/auth/logout', {
-            method: 'POST',
-            credentials: 'include',
-        })
-        setSession(null)
-        setUser(null)
-        setIsLoading(false)
-    }, [])
+    const logout = async () => {
+        console.log('[logout] 로그아웃 시작');
+        setIsLoading(true)
+        try {
+            const res = await fetch('/api/auth/logout', {
+                method: 'POST',
+                credentials: 'include',
+            })
+            console.log('[logout] 로그아웃 응답:', res.status);
+            setUser(null)
+            setSession(null)
+        } catch (err) {
+            console.error('logout error:', err)
+        } finally {
+            console.log('[logout] 로그아웃 완료, isLoading false로 설정');
+            setIsLoading(false)
+        }
+    }
 
     useEffect(() => {
         refreshSession()

@@ -21,7 +21,7 @@ export const createSession = async (user: { id: number, role: string }) => {
 
   if (process.env.SESSION_STRATEGY === 'jwt') {
     const jwt = await signToken(
-      { userId: user.id, role: user.role, expiresAt },
+      { userId: user.id, role: user.role, expiresAt, name: user.name },
       false // SECRET
     );
     return { jwt, expiresAt };

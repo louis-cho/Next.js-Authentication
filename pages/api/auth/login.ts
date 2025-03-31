@@ -45,10 +45,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 
         console.log("cookie 32323 >> " + cookie);
         res.setHeader('Set-Cookie', cookie);
-
+        const { password: _, ...other } = user;
         return res.status(200).json({
             message: '로그인 성공!',
-            role: user.role,
+            user: other
         });
     } catch (err) {
         console.error(err);

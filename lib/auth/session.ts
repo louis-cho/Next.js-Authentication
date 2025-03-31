@@ -2,37 +2,38 @@ import { ROLES } from '@/constants/role';
 import { createSessionCookie } from '@/lib/auth/cookie';
 import { signToken, verifyToken } from '@/lib/auth/token';
 import { db } from '@/lib/db';
+import { serialize } from 'cookie';
 
 const strategy = process.env.SESSION_STRATEGY || 'db';
 
-export async function createSession(user: { id: number, role: string }) {
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7일
-  let sessionToken: string;
+// export async function createSession(user: { id: number, role: string, name: string }) {
+//   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7일
+//   let sessionToken: string;
 
-  if (strategy === 'jwt') {
-    sessionToken = await signToken(
-      { userId: user.id, role: user.role, expiresAt },
-      false // SECRET
-    );
-  } else {
-    const result = await db.query(
-      'INSERT INTO sessions (user_id, expires_at) VALUES ($1, $2) RETURNING id',
-      [user.id, expiresAt]
-    );
-    const sessionId = result.rows[0].id;
+//   if (strategy === 'jwt') {
+//     sessionToken = await signToken(
+//       { userId: user.id, role: user.role, name: user.name, expiresAt },
+//       false // SECRET
+//     );
+//   } else {
+//     const result = await db.query(
+//       'INSERT INTO sessions (user_id, expires_at) VALUES ($1, $2) RETURNING id',
+//       [user.id, expiresAt]
+//     );
+//     const sessionId = result.rows[0].id;
 
-    if (strategy === 'db-jwt') {
-      sessionToken = await signToken(
-        { sessionId, expiresAt: expiresAt.toISOString() }, // ISO로 넣기
-        true // SECRET <<<< 핵심
-      );
-    } else {
-      sessionToken = String(sessionId);
-    }
-  }
+//     if (strategy === 'db-jwt') {
+//       sessionToken = await signToken(
+//         { sessionId, expiresAt: expiresAt.toISOString() }, // ISO로 넣기
+//         true // SECRET <<<< 핵심
+//       );
+//     } else {
+//       sessionToken = String(sessionId);
+//     }
+//   }
 
-  return createSessionCookie(sessionToken, expiresAt);
-}
+//   return createSessionCookie(sessionToken, expiresAt);
+// }
 
 export async function verifySession(rawCookies: { [key: string]: string | undefined }) {
   const sessionCookie = rawCookies['session'];
@@ -50,6 +51,7 @@ export async function verifySession(rawCookies: { [key: string]: string | undefi
 
       return {
         userId: payload.userId,
+        name: payload.name,
         role: payload.role ?? ROLES.VIEWER,
         expireAt: payload.exp ?? null,
       }
@@ -91,6 +93,7 @@ export async function extendSession(rawCookies: { [key: string]: string | undefi
       sessionToken = await signToken(
         {
           userId: payload.userId,
+          name: payload.name,
           role: payload.role,
           expiresAt: newExpiresAt,
         },
@@ -140,21 +143,39 @@ export async function deleteSession(rawCookies: { [key: string]: string | undefi
 
   try {
     if (strategy === 'jwt') {
-      return null;
+      // ✅ JWT 방식일 땐 DB 삭제는 없지만, 쿠키는 만료시켜야 함
+      return serialize('session', '', {
+        path: '/',
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        expires: new Date(0), // ✅ 쿠키 만료
+      })
     }
 
-    let sessionId;
+
+    let sessionId
     if (strategy === 'db-jwt') {
-      const { payload } = await verifyToken(sessionCookie, true); // SECRET
-      sessionId = payload.sessionId;
+      const { payload } = await verifyToken(sessionCookie, true) // SECRET
+      sessionId = payload.sessionId
     } else {
-      sessionId = sessionCookie;
+      sessionId = sessionCookie
     }
 
-    await db.query('DELETE FROM sessions WHERE id = $1', [sessionId]);
+    // ✅ DB 세션 삭제
+    await db.query('DELETE FROM sessions WHERE id = $1', [sessionId])
+
+    // ✅ 쿠키 만료 반환
+    return serialize('session', '', {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      expires: new Date(0),
+    })
   } catch (err) {
-    console.error('[deleteSession] Error:', err);
+    console.error('[deleteSession] Error:', err)
   }
 
-  return null;
+  return null
 }

@@ -40,6 +40,6 @@ export type LoginFormState = {
         email?: string[]
         password?: string[]
     },
-    role?: string,
+    user?: object,
     message?: string
 }

@@ -2,7 +2,7 @@ import { extendSession } from '@/lib/auth/session';
 
 export default async function handler(req, res) {
     console.log('[API] /refresh 쿠키 >>', req.cookies)
-
+    
     const cookie = await extendSession(req.cookies)
 
     console.log('refresh.ts >> ' + cookie);

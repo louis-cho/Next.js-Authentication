@@ -4,14 +4,16 @@ import { hasRole } from "@/lib/auth/auth";
 import { useContext } from "react";
 
 export const useAuth = () => {
-    const { user, session, logout } = useContext(AuthContext)
+    const { user, session, logout, refreshSession } = useContext(AuthContext)
 
     const isLoggedIn = !!user
     const isLoading = user === null && session === null // 로딩 중 판단
 
+
     return {
         user,
         session,
+        refreshSession,
         isLoggedIn,
         isLoading,
         isAdmin: hasRole(user?.role, ROLES.ADMIN),

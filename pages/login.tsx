@@ -1,4 +1,5 @@
 import { ERROR_CODES } from '@/constants/errorCodes';
+import { ROLES } from '@/constants/role';
 import { useAuth } from '@/hooks/useAuth';
 import { verifySession } from '@/lib/auth/session';
 import { useRouter } from 'next/router';
@@ -26,23 +27,12 @@ export default function Login() {
     const [errors, setErrors] = useState<{ email?: string[], password?: string[] }>({});
     const [message, setMessage] = useState('');
     const [mounted, setMounted] = useState(false);
-    const [doRefresh, setDoRefresh] = useState(false);
+    const auth = useAuth();
 
     useEffect(() => {
         setMounted(true);
     }, []);
 
-    const auth = mounted ? useAuth() : null;
-
-    // ✅ 로그인 후 refreshSession 호출
-    useEffect(() => {
-        if (doRefresh && auth?.refreshSession) {
-            (async () => {
-                await auth.refreshSession();
-                router.reload();
-            })();
-        }
-    }, [doRefresh, auth?.refreshSession]);
 
     if (!mounted) return null;
 
@@ -61,7 +51,30 @@ export default function Login() {
         if (res.status === 200) {
             setErrors({});
             setMessage(data.message);
-            setDoRefresh(true); // ✅ refreshSession 트리거
+
+            // ✅ 세션 갱신
+            await auth.refreshSession();
+
+            const role = auth.user?.role ?? ROLES.VIEWER;
+            console.log("logged in user role >>>>> " + role);
+            let destination = null;
+            switch (role) {
+                case ROLES.ADMIN:
+                    destination = '/admin/dashboard';
+                    break;
+                case ROLES.STAFF:
+                    destination = '/admin/dashboard';
+                    break;
+                case ROLES.USER:
+                    destination = '/user/dashboard';
+                    break;
+                case ROLES.VIEWER:
+                    destination = '/'; // 또는 '/'
+                    break;
+            }
+            console.log("data >>>>>>>>>>>>> " + JSON.stringify(data))
+            router.push(destination);
+
         } else if (res.status === 400 && data.errors) {
             setErrors(data.errors);
             setMessage('');
